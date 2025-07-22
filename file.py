@@ -72,7 +72,7 @@ def extract_first_line(text: str) -> str:
     return text.splitlines()[0].strip()
 
 
-def remove_footnotes_from_types(types_cell):
+def remove_footnotes_from_types(types_cell: BeautifulSoup) -> None:
     for span in types_cell.find_all("sup"):
         span.decompose()
 
@@ -89,9 +89,10 @@ def has_invalid_types(types: List[str]) -> bool:
 
 def fetch_url(url: str) -> str:
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=60)
         response.raise_for_status()
         return response.text
+    # we can improve this error handling by catching specific exceptions
     except Exception as e:
         print(f"Failed to fetch the URL {url}: {e}")
         raise
@@ -126,7 +127,7 @@ def find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url):
     return header_indices, target_table
 
 
-def extract_list_link(name_cell) -> Optional[str]:
+def extract_list_link(name_cell: BeautifulSoup) -> Optional[str]:
     for item in name_cell.contents:
         item_str = str(item)
         if "<i>(<a href=" in item_str and "list</a>)</i>" in item_str:
