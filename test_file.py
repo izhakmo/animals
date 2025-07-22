@@ -1,5 +1,7 @@
 import unittest
-from file import extract_first_line, split_multiple_types, has_invalid_type
+
+from web_scrapper import extract_first_line, split_multiple_types, has_invalid_type
+
 
 class TestExtractFirstLine(unittest.TestCase):
     def test_albatross(self):
