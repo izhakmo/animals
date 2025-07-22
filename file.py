@@ -9,7 +9,8 @@ TABLE_ROW_TAG = "tr"
 TABLE_CELL_TAG = "td"
 
 
-def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header: str, types_header: str) -> Dict[str, List[str]]:
+def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header: str, types_header: str) -> Dict[
+    str, List[str]]:
     full_url = base_url + suffix_url
     header_indices, target_table = find_wikipedia_table_and_headers(name_header, types_header, full_url)
 
@@ -17,7 +18,8 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
     errors_log = []
     lists_log = []
 
-    create_dir_if_not_exist("tmp")
+    dir_path = "tmp"
+    create_dir_if_not_exist(dir_path)
 
     # Process table rows
     for row in target_table.find_all(TABLE_ROW_TAG)[1:]:
@@ -29,14 +31,13 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
         name_cell = cells[header_indices['name']]
         name, href = extract_name_and_link(name_cell)
 
-
         # TODO - here i will later on use threads or kafka to download the images and save them to a folder
         if href:
-            # response_text = fetch_url(base_url + href)
-            # soup = BeautifulSoup(response_text, "html.parser")
-            # image_url = soup.find('img')['src']
-            # print(f"Found image: {image_url}")
-            pass
+            # Sanitize name for filename
+            safe_name = name.replace('/', '_')
+            image_url = get_main_image_url(base_url + href)
+            if image_url:
+                download_image(image_url, f"{dir_path}/{safe_name}.jpg")
 
         types_cell = cells[header_indices['types']]
         types = extract_types_from_cell(types_cell)
@@ -58,7 +59,6 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
 
     write_log_file("errors.log", errors_log)
     write_log_file("animals_with_lists.log", lists_log)
-
 
     return result
 
@@ -162,3 +162,28 @@ def extract_name_and_link(name_cell) -> (str, Optional[str]):
 
 def create_dir_if_not_exist(dir_path: str) -> None:
     os.makedirs(dir_path, exist_ok=True)
+
+
+def get_main_image_url(wikipedia_url: str) -> Optional[str]:
+    response = requests.get(wikipedia_url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    infobox = soup.find("table", class_="infobox")
+    if infobox:
+        img = infobox.find("img")
+        if img and img.get("src"):
+            # Wikipedia image paths are relative; prepend with protocol
+            return "https:" + img["src"]
+    return None
+
+
+def download_image(image_url: str, filename: str):
+    try:
+        response = requests.get(image_url)
+        response.raise_for_status()
+        with open(filename, "wb") as f:
+            f.write(response.content)
+    except Exception as e:
+        # TODO - write this exception to a log file
+        print(f"Failed to download image from url: {image_url} to file:{filename} : {e}")
