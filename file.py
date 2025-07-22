@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Optional
 import re
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 TABLE_HEADER_TAG = "th"
 TABLE_ROW_TAG = "tr"
@@ -15,12 +17,13 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
     header_indices, target_table = find_wikipedia_table_and_headers(name_header, types_header, full_url)
 
     result: Dict[str, List[str]] = {}
-    errors_log = []
+    animals_with_invalid_types = []
     lists_log = []
 
     dir_path = "tmp"
     create_dir_if_not_exist(dir_path)
 
+    download_tasks = []
     # Process table rows
     for row in target_table.find_all(TABLE_ROW_TAG)[1:]:
         cells = row.find_all([TABLE_CELL_TAG, TABLE_HEADER_TAG])
@@ -31,13 +34,8 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
         name_cell = cells[header_indices['name']]
         name, href = extract_name_and_link(name_cell)
 
-        # TODO - here i will later on use threads or kafka to download the images and save them to a folder
         if href:
-            # Sanitize name for filename
-            safe_name = name.replace('/', '_')
-            image_url = get_main_image_url(base_url + href)
-            if image_url:
-                download_image(image_url, f"{dir_path}/{safe_name}.jpg")
+            download_tasks.append((base_url, href, name, dir_path))
 
         types_cell = cells[header_indices['types']]
         types = extract_types_from_cell(types_cell)
@@ -48,8 +46,8 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
 
         # Check for empty or non-alphanumeric types
         if has_invalid_types(types):
-            errors_log.append(" | ".join(cell.get_text(strip=True) for cell in cells))
-            continue
+            animals_with_invalid_types.append(" | ".join(cell.get_text(strip=True) for cell in cells))
+            types = ["undefined type"]
 
         # Populate dictionary
         for t in types:
@@ -57,8 +55,17 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
                 result[t] = []
             result[t].append(name)
 
-    write_log_file("errors.log", errors_log)
+    write_log_file("animals_with_invalid_types.log", animals_with_invalid_types)
     write_log_file("animals_with_lists.log", lists_log)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(fetch_and_save_image, *args) for args in download_tasks]
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error in image download thread: {e}, future: {future}")
+    print("All image download threads have finished.")
 
     return result
 
@@ -187,3 +194,14 @@ def download_image(image_url: str, filename: str):
     except Exception as e:
         # TODO - write this exception to a log file
         print(f"Failed to download image from url: {image_url} to file:{filename} : {e}")
+
+
+def fetch_and_save_image(base_url: str, href: str, name: str, dir_path: str):
+    start_time = time.time()
+    # Sanitize name for filename
+    safe_name = name.replace('/', '_')
+    image_url = get_main_image_url(base_url + href)
+    if image_url:
+        download_image(image_url, f"{dir_path}/{safe_name}.jpg")
+    elapsed = time.time() - start_time
+    print(f"Downloaded image for '{name}' in {elapsed:.2f} seconds")
