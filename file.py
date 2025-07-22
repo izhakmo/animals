@@ -106,8 +106,12 @@ def extract_types_from_cell(types_cell) -> List[str]:
     return split_multiple_types(types_raw)
 
 
+def is_invalid_type(type_str: str) -> bool:
+    return not re.search(r'\w', type_str)
+
+
 def has_invalid_type(types: List[str]) -> bool:
-    return not types or all(not re.search(r'\w', t) for t in types)
+    return not types or all(is_invalid_type(t) for t in types)
 
 
 def fetch_url(url: str) -> str:
