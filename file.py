@@ -4,39 +4,7 @@ from typing import Dict, List
 import re
 
 def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_header: str) -> Dict[str, List[str]]:
-    # Fetch the HTML content
-    response = requests.get(wikipedia_url)
-    # TODO - what is this
-    response.raise_for_status()
-    # TODO - rename this soup
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    # get all tables
-    tables = soup.find_all("table")
-    target_table = None
-    header_indices = {}
-
-    # find table with name_header and types_header
-    for table in tables:
-        # get all table headers
-        headers = table.find_all("th")
-        # extract header texts
-        header_texts = [header.get_text(strip=True) for header in headers]
-        if name_header in header_texts and types_header in header_texts:
-            # Map header names to their column indices
-            header_row = headers[0].find_parent("tr")
-            header_cells = header_row.find_all(["th", "td"])
-            for idx, cell in enumerate(header_cells):
-                text = cell.get_text(strip=True)
-                if text == name_header:
-                    header_indices['name'] = idx
-                if text == types_header:
-                    header_indices['types'] = idx
-            target_table = table
-            break
-
-    if not target_table or 'name' not in header_indices or 'types' not in header_indices:
-        raise ValueError("Could not find a table with the specified headers.")
+    header_indices, target_table = find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url)
 
     result: Dict[str, List[str]] = {}
     errors_log = []
@@ -51,6 +19,12 @@ def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_
         # Extract name and types
         name_cell = cells[header_indices['name']]
         types_cell = cells[header_indices['types']]
+
+        # print(f"{name_cell=}, {types_cell=}")
+
+        if has_special_list_link(name_cell):
+            lists_log.append(" | ".join(cell.get_text(strip=True) for cell in cells))
+
 
         # Handle <br> and newlines
         name_raw = name_cell.get_text(separator="\n", strip=True)
@@ -67,7 +41,7 @@ def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_
             continue
 
         # Check for (list) in name
-        if name.lower().endswith("(list)"):
+        if name.lower().endswith("(list)") or "Cat" in name.lower():
             lists_log.append(" | ".join(cell.get_text(strip=True) for cell in cells))
             continue
 
@@ -90,4 +64,40 @@ def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_
 
     return result
 
-# Example usage:
+
+def find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url):
+    # Fetch the HTML content
+    response = requests.get(wikipedia_url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+    # Find all tables
+    tables = soup.find_all("table")
+    target_table = None
+    header_indices = {}
+    # Find the first table with both headers
+    for table in tables:
+        headers = table.find_all("th")
+        header_texts = [h.get_text(strip=True) for h in headers]
+        if name_header in header_texts and types_header in header_texts:
+            # Map header names to their column indices
+            header_row = headers[0].find_parent("tr")
+            header_cells = header_row.find_all(["th", "td"])
+            for idx, cell in enumerate(header_cells):
+                text = cell.get_text(strip=True)
+                if text == name_header:
+                    header_indices['name'] = idx
+                if text == types_header:
+                    header_indices['types'] = idx
+            target_table = table
+            break
+    if not target_table or 'name' not in header_indices or 'types' not in header_indices:
+        raise ValueError(f"Could not find a table with the specified headers: {name_header=}, {types_header=}")
+    return header_indices, target_table
+
+
+# TODO - give a better name
+def has_special_list_link(name_cell) -> bool:
+    return any(
+        "<i>(<a href=" in str(item) and "list</a>)</i>" in str(item)
+        for item in name_cell.contents
+    )
