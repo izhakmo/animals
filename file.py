@@ -87,11 +87,20 @@ def has_invalid_types(types: List[str]) -> bool:
     return not types or all(not re.search(r'\w', t) for t in types)
 
 
+def fetch_url(url: str) -> str:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.text
+    except Exception as e:
+        print(f"Failed to fetch the URL {url}: {e}")
+        raise
+
+
 def find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url):
     # Fetch the HTML content
-    response = requests.get(wikipedia_url)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
+    response_text = fetch_url(wikipedia_url)
+    soup = BeautifulSoup(response_text, "html.parser")
     # Find all tables
     tables = soup.find_all("table")
     target_table = None
