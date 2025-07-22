@@ -5,10 +5,7 @@ import re
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-
-TABLE_HEADER_TAG = "th"
-TABLE_ROW_TAG = "tr"
-TABLE_CELL_TAG = "td"
+from constants import TABLE_HEADER_TAG, TABLE_ROW_TAG, TABLE_CELL_TAG
 
 
 def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header: str, types_header: str) -> Dict[

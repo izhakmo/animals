@@ -1,0 +1,3 @@
+TABLE_HEADER_TAG = "th"
+TABLE_ROW_TAG = "tr"
+TABLE_CELL_TAG = "td" 
