@@ -1,7 +1,12 @@
 import requests
 from bs4 import BeautifulSoup
-from typing import Dict, List
+from typing import Dict, List, Optional
 import re
+
+TABLE_HEADER_TAG = "th"
+TABLE_ROW_TAG = "tr"
+TABLE_CELL_TAG = "td"
+
 
 def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_header: str) -> Dict[str, List[str]]:
     header_indices, target_table = find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url)
@@ -11,58 +16,75 @@ def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_
     lists_log = []
 
     # Process table rows
-    for row in target_table.find_all("tr")[1:]:
-        cells = row.find_all(["td", "th"])
-        if len(cells) <= max(header_indices['name'], header_indices['types']):
-            continue  # skip incomplete rows
+    for row in target_table.find_all(TABLE_ROW_TAG)[1:]:
+        cells = row.find_all([TABLE_CELL_TAG, TABLE_HEADER_TAG])
+        if is_incomplete_row(cells, header_indices):
+            continue
 
         # Extract name and types
         name_cell = cells[header_indices['name']]
-        types_cell = cells[header_indices['types']]
 
-        # print(f"{name_cell=}, {types_cell=}")
-
-        if has_special_list_link(name_cell):
-            lists_log.append(" | ".join(cell.get_text(strip=True) for cell in cells))
-
-
-        # Handle <br> and newlines
         name_raw = name_cell.get_text(separator="\n", strip=True)
-        types_raw = types_cell.get_text(separator="\n", strip=True)
-
         # Only consider the first line for name
-        name = name_raw.splitlines()[0].strip() if name_raw else ""
+        name = extract_first_line(name_raw)
+
+        types_cell = cells[header_indices['types']]
+        remove_footnotes_from_types(types_cell)
+        types_raw = types_cell.get_text(separator="\n", strip=True)
         # Split types by lines
-        types = [t.strip() for t in re.split(r'[\n\r]+', types_raw) if t.strip()]
+        types = split_multiple_types(types_raw)
+
+        if list_link := extract_list_link(name_cell):
+            # TODO - need to handle cases where we have no types_cell, multiple types
+            lists_log.append(f"{name} | {types} | {list_link}")
 
         # Check for empty or non-alphanumeric types
-        if not types or all(not re.search(r'\w', t) for t in types):
+        if has_invalid_types(types):
             errors_log.append(" | ".join(cell.get_text(strip=True) for cell in cells))
-            continue
-
-        # Check for (list) in name
-        if name.lower().endswith("(list)") or "Cat" in name.lower():
-            lists_log.append(" | ".join(cell.get_text(strip=True) for cell in cells))
             continue
 
         # Populate dictionary
         for t in types:
-            if not name:
-                continue
             if t not in result:
                 result[t] = []
             result[t].append(name)
 
-    # Write logs
-    with open("errors.log", "w", encoding="utf-8") as f:
-        for line in errors_log:
-            f.write(line + "\n")
-
-    with open("animals_with_lists.log", "w", encoding="utf-8") as f:
-        for line in lists_log:
-            f.write(line + "\n")
+    write_log_file("errors.log", errors_log)
+    write_log_file("animals_with_lists.log", lists_log)
 
     return result
+
+
+def write_log_file(filename: str, log_entries: List[str]) -> None:
+    """Write log entries to a file, one per line."""
+    with open(filename, "w", encoding="utf-8") as f:
+        for line in log_entries:
+            f.write(line + "\n")
+
+
+def is_incomplete_row(cells: List, header_indices: Dict[str, int]) -> bool:
+    """Check if a table row has enough cells to contain both required columns."""
+    return len(cells) <= max(header_indices['name'], header_indices['types'])
+
+
+def extract_first_line(text: str) -> str:
+    """Extract and clean the first line from a multi-line text."""
+    return text.splitlines()[0].strip()
+
+
+def remove_footnotes_from_types(types_cell):
+    for span in types_cell.find_all("sup"):
+        span.decompose()
+
+
+def split_multiple_types(types_raw: str) -> List[str]:
+    """Parse types from raw text by splitting on newlines and cleaning whitespace."""
+    return [t.strip() for t in re.split(r'[\n\r]+', types_raw) if t.strip()]
+
+
+def has_invalid_types(types: List[str]) -> bool:
+    # TODO - make a function of 2nd part
+    return not types or all(not re.search(r'\w', t) for t in types)
 
 
 def find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url):
@@ -76,12 +98,12 @@ def find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url):
     header_indices = {}
     # Find the first table with both headers
     for table in tables:
-        headers = table.find_all("th")
+        headers = table.find_all(TABLE_HEADER_TAG)
         header_texts = [h.get_text(strip=True) for h in headers]
         if name_header in header_texts and types_header in header_texts:
             # Map header names to their column indices
-            header_row = headers[0].find_parent("tr")
-            header_cells = header_row.find_all(["th", "td"])
+            header_row = headers[0].find_parent(TABLE_ROW_TAG)
+            header_cells = header_row.find_all([TABLE_HEADER_TAG, TABLE_CELL_TAG])
             for idx, cell in enumerate(header_cells):
                 text = cell.get_text(strip=True)
                 if text == name_header:
@@ -95,9 +117,10 @@ def find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url):
     return header_indices, target_table
 
 
-# TODO - give a better name
-def has_special_list_link(name_cell) -> bool:
-    return any(
-        "<i>(<a href=" in str(item) and "list</a>)</i>" in str(item)
-        for item in name_cell.contents
-    )
+def extract_list_link(name_cell) -> Optional[str]:
+    for item in name_cell.contents:
+        item_str = str(item)
+        if "<i>(<a href=" in item_str and "list</a>)</i>" in item_str:
+            link = BeautifulSoup(item_str, "html.parser").find('a')
+            return link.get('href') if link else None
+    return None
