@@ -45,7 +45,7 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
             lists_log.append(f"{name} | {types} | {list_link}")
 
         # Check for empty or non-alphanumeric types
-        if has_invalid_types(types):
+        if has_invalid_type(types):
             animals_with_invalid_types.append(" | ".join(cell.get_text(strip=True) for cell in cells))
             types = ["undefined type"]
 
@@ -67,7 +67,7 @@ def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header:
                 print(f"Error in image download thread: {e}, future: {future}")
     print("All image download threads have finished.")
 
-    generate_html_report(result, dir_path)
+    generate_html_report(result, dir_path, "report.html")
 
     return result
 
@@ -106,7 +106,7 @@ def extract_types_from_cell(types_cell) -> List[str]:
     return split_multiple_types(types_raw)
 
 
-def has_invalid_types(types: List[str]) -> bool:
+def has_invalid_type(types: List[str]) -> bool:
     return not types or all(not re.search(r'\w', t) for t in types)
 
 
@@ -151,11 +151,11 @@ def find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url):
 
 
 def extract_list_link(name_cell) -> Optional[str]:
-    for item in name_cell.contents:
-        item_str = str(item)
-        if "<i>(<a href=" in item_str and "list</a>)</i>" in item_str:
-            link = BeautifulSoup(item_str, "html.parser").find('a')
-            return link.get('href') if link else None
+    # Look for an <i> tag containing an <a> tag with 'list' in its text
+    for i_tag in name_cell.find_all('i'):
+        a_tag = i_tag.find('a')
+        if a_tag and 'list' in a_tag.get_text(strip=True).lower():
+            return a_tag.get('href')
     return None
 
 
@@ -215,7 +215,7 @@ def fetch_and_save_image(base_url: str, href: str, name: str, dir_path: str):
     print(f"Downloaded image for '{name}' in {elapsed.total_seconds():.2f} seconds")
 
 
-def generate_html_report(result: Dict[str, List[str]], dir_path: str, html_filename: str = "report.html"):
+def generate_html_report(result: Dict[str, List[str]], dir_path: str, html_filename: str):
     with open(html_filename, "w", encoding="utf-8") as f:
         f.write("<html><head><title>Animal Report</title></head><body>\n")
         f.write("<h1>Animal Types and Images</h1>\n")
