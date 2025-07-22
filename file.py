@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 import re
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import time
+from datetime import datetime
 
 TABLE_HEADER_TAG = "th"
 TABLE_ROW_TAG = "tr"
@@ -105,7 +105,6 @@ def extract_types_from_cell(types_cell) -> List[str]:
 
 
 def has_invalid_types(types: List[str]) -> bool:
-    # TODO - make a function of 2nd part
     return not types or all(not re.search(r'\w', t) for t in types)
 
 
@@ -185,6 +184,14 @@ def get_main_image_url(wikipedia_url: str) -> Optional[str]:
     return None
 
 
+def log_image_download_error(image_url: str, filename: str, error: Exception):
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_message = f"[{timestamp}] file: {filename}, failed to download image from url: {image_url}. error: {error}"
+    print(log_message)
+    with open("image_download_errors.log", "a", encoding="utf-8") as f:
+        f.write(log_message + "\n")
+
+
 def download_image(image_url: str, filename: str):
     try:
         response = requests.get(image_url)
@@ -192,16 +199,15 @@ def download_image(image_url: str, filename: str):
         with open(filename, "wb") as f:
             f.write(response.content)
     except Exception as e:
-        # TODO - write this exception to a log file
-        print(f"Failed to download image from url: {image_url} to file:{filename} : {e}")
+        log_image_download_error(image_url, filename, e)
 
 
 def fetch_and_save_image(base_url: str, href: str, name: str, dir_path: str):
-    start_time = time.time()
+    start_time = datetime.now()
     # Sanitize name for filename
     safe_name = name.replace('/', '_')
     image_url = get_main_image_url(base_url + href)
     if image_url:
         download_image(image_url, f"{dir_path}/{safe_name}.jpg")
-    elapsed = time.time() - start_time
-    print(f"Downloaded image for '{name}' in {elapsed:.2f} seconds")
+    elapsed = datetime.now() - start_time
+    print(f"Downloaded image for '{name}' in {elapsed.total_seconds():.2f} seconds")
