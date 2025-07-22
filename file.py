@@ -6,6 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from constants import TABLE_HEADER_TAG, TABLE_ROW_TAG, TABLE_CELL_TAG
+from report_generator import generate_html_report
 
 
 def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header: str, types_header: str) -> Dict[
@@ -214,26 +215,6 @@ def fetch_and_save_image(base_url: str, href: str, name: str, dir_path: str):
         download_image(image_url, f"{dir_path}/{safe_name}.jpg")
     elapsed = datetime.now() - start_time
     print(f"Downloaded image for '{name}' in {elapsed.total_seconds():.2f} seconds")
-
-
-def generate_html_report(result: Dict[str, List[str]], dir_path: str, html_filename: str):
-    with open(html_filename, "w", encoding="utf-8") as f:
-        f.write("<html><head><title>Animal Report</title></head><body>\n")
-        f.write("<h1>Animal Types and Images</h1>\n")
-        for key in sorted(result.keys()):
-            values = result[key]
-            f.write(f"<h2>{key}</h2>\n<ul>\n")
-            for value in values:
-                safe_name = value.replace('/', '_')
-                image_path = os.path.join(dir_path, f"{safe_name}.jpg")
-                f.write(f"<li>{value}<br>")
-                if os.path.exists(image_path):
-                    f.write(f'<img src="{image_path}" alt="{value}" style="max-width:200px;"><br>')
-                else:
-                    f.write("(could not find image)<br>")
-                f.write("</li>\n")
-            f.write("</ul>\n")
-        f.write("</body></html>\n")
     
 
     
