@@ -2,18 +2,22 @@ import requests
 from bs4 import BeautifulSoup
 from typing import Dict, List, Optional
 import re
+import os
 
 TABLE_HEADER_TAG = "th"
 TABLE_ROW_TAG = "tr"
 TABLE_CELL_TAG = "td"
 
 
-def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_header: str) -> Dict[str, List[str]]:
-    header_indices, target_table = find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url)
+def fetch_and_parse_wikipedia_table(base_url: str, suffix_url: str, name_header: str, types_header: str) -> Dict[str, List[str]]:
+    full_url = base_url + suffix_url
+    header_indices, target_table = find_wikipedia_table_and_headers(name_header, types_header, full_url)
 
     result: Dict[str, List[str]] = {}
     errors_log = []
     lists_log = []
+
+    create_dir_if_not_exist("tmp")
 
     # Process table rows
     for row in target_table.find_all(TABLE_ROW_TAG)[1:]:
@@ -23,16 +27,19 @@ def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_
 
         # Extract name and types
         name_cell = cells[header_indices['name']]
+        name, href = extract_name_and_link(name_cell)
 
-        name_raw = name_cell.get_text(separator="\n", strip=True)
-        # Only consider the first line for name
-        name = extract_first_line(name_raw)
+
+        # TODO - here i will later on use threads or kafka to download the images and save them to a folder
+        if href:
+            # response_text = fetch_url(base_url + href)
+            # soup = BeautifulSoup(response_text, "html.parser")
+            # image_url = soup.find('img')['src']
+            # print(f"Found image: {image_url}")
+            pass
 
         types_cell = cells[header_indices['types']]
-        remove_footnotes_from_types(types_cell)
-        types_raw = types_cell.get_text(separator="\n", strip=True)
-        # Split types by lines
-        types = split_multiple_types(types_raw)
+        types = extract_types_from_cell(types_cell)
 
         if list_link := extract_list_link(name_cell):
             # TODO - need to handle cases where we have no types_cell, multiple types
@@ -51,6 +58,7 @@ def fetch_and_parse_wikipedia_table(wikipedia_url: str, name_header: str, types_
 
     write_log_file("errors.log", errors_log)
     write_log_file("animals_with_lists.log", lists_log)
+
 
     return result
 
@@ -72,7 +80,7 @@ def extract_first_line(text: str) -> str:
     return text.splitlines()[0].strip()
 
 
-def remove_footnotes_from_types(types_cell: BeautifulSoup) -> None:
+def remove_footnotes_from_types(types_cell) -> None:
     for span in types_cell.find_all("sup"):
         span.decompose()
 
@@ -80,6 +88,13 @@ def remove_footnotes_from_types(types_cell: BeautifulSoup) -> None:
 def split_multiple_types(types_raw: str) -> List[str]:
     """Parse types from raw text by splitting on newlines and cleaning whitespace."""
     return [t.strip() for t in re.split(r'[\n\r]+', types_raw) if t.strip()]
+
+
+def extract_types_from_cell(types_cell) -> List[str]:
+    remove_footnotes_from_types(types_cell)
+    types_raw = types_cell.get_text(separator="\n", strip=True)
+    # Split types by lines
+    return split_multiple_types(types_raw)
 
 
 def has_invalid_types(types: List[str]) -> bool:
@@ -127,10 +142,23 @@ def find_wikipedia_table_and_headers(name_header, types_header, wikipedia_url):
     return header_indices, target_table
 
 
-def extract_list_link(name_cell: BeautifulSoup) -> Optional[str]:
+def extract_list_link(name_cell) -> Optional[str]:
     for item in name_cell.contents:
         item_str = str(item)
         if "<i>(<a href=" in item_str and "list</a>)</i>" in item_str:
             link = BeautifulSoup(item_str, "html.parser").find('a')
             return link.get('href') if link else None
     return None
+
+
+def extract_name_and_link(name_cell) -> (str, Optional[str]):
+    name_raw = name_cell.get_text(separator="\n", strip=True)
+    # Only consider the first line for name
+    name = extract_first_line(name_raw)
+    link_tag = name_cell.find('a')
+    href = link_tag.get('href') if link_tag else None
+    return name, href
+
+
+def create_dir_if_not_exist(dir_path: str) -> None:
+    os.makedirs(dir_path, exist_ok=True)
