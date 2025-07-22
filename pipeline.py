@@ -21,7 +21,7 @@ def fetch_and_parse_web_table(base_url: str, suffix_url: str, name_header: str, 
     header_indices, target_table = find_web_table_and_headers(name_header, types_header, full_url)
 
     result: Dict[str, List[str]] = {}
-    animals_with_invalid_types = []
+    rows_with_invalid_types = []
     lists_log = []
 
     dir_path = "tmp"
@@ -49,7 +49,7 @@ def fetch_and_parse_web_table(base_url: str, suffix_url: str, name_header: str, 
 
         # Check for empty or non-alphanumeric types
         if has_invalid_type(types):
-            animals_with_invalid_types.append(" | ".join(cell.get_text(strip=True) for cell in cells))
+            rows_with_invalid_types.append(" | ".join(cell.get_text(strip=True) for cell in cells))
             types = ["undefined type"]
 
         # Populate dictionary
@@ -58,8 +58,8 @@ def fetch_and_parse_web_table(base_url: str, suffix_url: str, name_header: str, 
                 result[t] = []
             result[t].append(name)
 
-    write_log_file("animals_with_invalid_types.log", animals_with_invalid_types)
-    write_log_file("animals_with_lists.log", lists_log)
+    write_log_file("rows_with_invalid_types.log", rows_with_invalid_types)
+    write_log_file("lists_log.log", lists_log)
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = [executor.submit(fetch_and_save_image, *args) for args in download_tasks]

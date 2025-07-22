@@ -1,5 +1,5 @@
 import time
-from file import fetch_and_parse_web_table
+from pipeline import fetch_and_parse_web_table
 
 if __name__ == "__main__":
     base_url = "https://en.wikipedia.org"
