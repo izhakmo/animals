@@ -15,4 +15,4 @@ modules that were used:
 * `constants.py`
 * (ut file)
 
-* how to use - `pip install -r requirements.txt`
+* how to use - `pip install -r requirements.txt` then run `main.py`
